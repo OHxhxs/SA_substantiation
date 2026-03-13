@@ -1,0 +1,44 @@
+# ── 환경변수 / 시크릿 ──────────────────────────────────
+.env
+.env.*
+!.env.example
+key.json
+*.pem
+*.key
+
+# ── Node.js ────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── 빌드 결과물 ────────────────────────────────────────
+dist/
+build/
+frontend/dist/
+frontend/build/
+
+# ── 런타임 데이터 ──────────────────────────────────────
+backend/survey_counters.json
+
+# ── Python ─────────────────────────────────────────────
+__pycache__/
+*.py[oc]
+wheels/
+*.egg-info
+.venv/
+
+# ── OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── 로그 ───────────────────────────────────────────────
+*.log
+logs/
+*.backup

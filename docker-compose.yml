@@ -1,0 +1,50 @@
+services:
+  # 백엔드 API 서버
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: medical-questionnaire-backend
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend/server.js:/app/server.js
+      - ./backend/prompts.yaml:/app/prompts.yaml
+      - ./backend/survey_counters.json:/app/survey_counters.json
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_SHEET_URL=${GOOGLE_SHEET_URL}
+      - CORS_ORIGIN=*
+    networks:
+      - medical-network
+    restart: unless-stopped
+
+  # 프론트엔드
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: medical-questionnaire-frontend
+    ports:
+      - "8755:8755"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://backend:3001
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+    networks:
+      - medical-network
+    restart: unless-stopped
+
+networks:
+  medical-network:
+    driver: bridge
