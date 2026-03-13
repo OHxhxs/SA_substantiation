@@ -43,7 +43,6 @@ jobs:
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GOOGLE_SHEET_URL=${{ secrets.GOOGLE_SHEET_URL }}
             NODE_ENV=production
-            PORT=3001
 
   # ── 프론트엔드: Firebase Hosting ──────────────────────
   deploy-frontend:
