@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "sasubstantiation-70423",
     "public": "frontend/dist",
     "ignore": [
       "firebase.json",
