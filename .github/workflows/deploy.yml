@@ -62,12 +62,7 @@ jobs:
         env:
           VITE_API_URL: ${{ secrets.CLOUD_RUN_URL }}
 
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
       - name: Deploy to Firebase Hosting
         run: npx firebase-tools@latest deploy --only hosting --project sasubstantiation-70423
         env:
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.auth.outputs.credentials_file_path }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
