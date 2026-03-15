@@ -70,4 +70,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.GCP_SA_KEY }}
           projectId: sasubstantiation-70423
           channelId: live
-          entryPoint: ./frontend
+          entryPoint: .
