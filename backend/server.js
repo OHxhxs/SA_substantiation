@@ -28,11 +28,8 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-// GPU 추론 서버 클라이언트 (룰베이스 문진 분석용)
-const gpuClient = new OpenAI({
-    baseURL: process.env.GPU_SERVER_URL || 'http://121.167.147.14:8754/v1',
-    apiKey: 'dummy',
-});
+// AI 서버 URL (선택형 문진 분석용 — inference_server.py)
+const AI_SERVER_URL = process.env.GPU_SERVER_URL || 'http://121.167.147.14:8755';
 
 // Google Sheets 저장 함수
 async function saveToGoogleSheets(payload) {
@@ -311,31 +308,45 @@ app.post('/api/analyze', async (req, res) => {
             .replace('{questionnaire_data}', questionnaireText)
             .replace('{disease_list}', diseaseList);
 
-        console.log('🤖 Calling GPU server for analysis...');
-        console.log('📋 Disease List Count:', diseaseList.split('\n').length);
-        console.log('📋 Disease List Sample (first 5):');
-        console.log(diseaseList.split('\n').slice(0, 5).join('\n'));
-
-        const completion = await gpuClient.chat.completions.create({
-            model: 'gastro',
-            messages: [
-                { role: 'user', content: analysisPrompt }
-            ],
-            max_tokens: 1500,
-            temperature: 0.1,
-        });
-
-        const rawContent = completion.choices[0].message.content;
-        console.log(`✅ Analysis completed - Tokens: ${completion.usage.total_tokens}`);
-
-        // JSON 파싱
         let analysisJson;
-        try {
-            analysisJson = JSON.parse(rawContent);
-        } catch (parseErr) {
-            // code block 감싸진 경우 제거 후 재시도
-            const cleaned = rawContent.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/,'').trim();
-            analysisJson = JSON.parse(cleaned);
+        let totalTokens = 0;
+
+        if (surveyType === 'rule') {
+            // ── 선택형 문진 → AI 서버 (Gemma) ──────────────────
+            console.log('🤖 Calling AI server (Gemma) for rule-based analysis...');
+            const aiServerUrl = AI_SERVER_URL;
+            const aiRes = await fetch(`${aiServerUrl}/api/analyze`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category, responses, language, gender, age, redFlagTriggered }),
+            });
+            if (!aiRes.ok) throw new Error(`AI server error: ${aiRes.status}`);
+            const aiData = await aiRes.json();
+            analysisJson = aiData.analysis;
+            totalTokens = aiData.tokens || 0;
+            console.log(`✅ AI server analysis completed - Tokens: ${totalTokens}`);
+
+        } else {
+            // ── 채팅 문진 → OpenAI ──────────────────────────────
+            console.log('🤖 Calling OpenAI for chat-based analysis...');
+            console.log('📋 Disease List Count:', diseaseList.split('\n').length);
+
+            const completion = await openai.chat.completions.create({
+                model: 'gpt-4o',
+                messages: [{ role: 'user', content: analysisPrompt }],
+                response_format: { type: 'json_object' },
+                max_completion_tokens: 3000,
+            });
+            const rawContent = completion.choices[0].message.content;
+            totalTokens = completion.usage.total_tokens;
+            console.log(`✅ OpenAI analysis completed - Tokens: ${totalTokens}`);
+
+            try {
+                analysisJson = JSON.parse(rawContent);
+            } catch (parseErr) {
+                const cleaned = rawContent.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+                analysisJson = JSON.parse(cleaned);
+            }
         }
 
         res.json({
@@ -346,7 +357,7 @@ app.post('/api/analyze', async (req, res) => {
             language,
             redFlagTriggered,
             timestamp: new Date().toISOString(),
-            tokens: completion.usage.total_tokens
+            tokens: totalTokens
         });
 
         // Google Sheets 저장 (응답 후 비동기)
