@@ -81,8 +81,8 @@ const App = () => {
   const chatMessageCountRef = useRef(0);
   const finishSurveyRef = useRef(null); // finishSurvey 함수 참조용
 
-  // 백엔드 API URL (Vite 프록시를 통해 접근)
-  const API_URL = '';
+  // 백엔드 API URL (프로덕션: VITE_API_URL, 로컬: Vite 프록시)
+  const API_URL = import.meta.env.VITE_API_URL || '';
 
   // 라우트 모드에 따라 언어 자동 설정 + 언어 선택 모달 건너뜀
   useEffect(() => {
