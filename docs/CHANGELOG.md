@@ -175,8 +175,55 @@
 
 ---
 
+---
+
+## 2026-03-16
+
+### 7. AI 서버 분리 및 Gemma 추론 파이프라인 구축
+
+**배경**
+- 선택형(rule) 문진 결과 분석을 OpenAI에서 자체 GPU 서버 Gemma 모델로 전환
+- ai_server/ 폴더 신설하여 GPU 서버 코드 분리
+
+**신규 파일**: `ai_server/inference_server.py`
+- FastAPI 서버 (port 8755), vLLM 래퍼
+- 라운드로빈 로드밸런서 (`itertools.cycle`)
+- MediKoGPT 프롬프트 포맷 (`###history_talking`)
+- 5단계 후처리: `step2_calibrate_confidence` / `step3_apply_weights` / `step4_red_flag_gate` / `step5_common_disease_fallback`
+
+**신규 파일**: `ai_server/start.sh`
+- GPU 1+2 Tensor Parallel (TP=2), vLLM 서버 + FastAPI 연속 실행
+- Base model: `aisingapore/Gemma-SEA-LION-v3-9B-IT`
+- LoRA: `MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172` (alias: `gastro`)
+
+**수정 파일**: `backend/server.js`
+- `gpuClient` (OpenAI SDK → vLLM 직접 호출) 제거
+- `GPU_SERVER_URL` 환경변수 추가 (기본: `http://121.167.147.14:8755`)
+- `surveyType` 기반 라우팅:
+  - `rule` → GPU 서버 (Gemma)
+  - `chat` → OpenAI gpt-4o
+
+**수정 파일**: `.github/workflows/deploy.yml`
+- `GPU_SERVER_URL=${{ secrets.GPU_SERVER_URL }}` Cloud Run 환경변수 추가
+
+---
+
+### 8. 프로덕션 JSON 파싱 오류 수정
+
+**문제**: Firebase에서 `/api/analyze` 호출 시 `Unexpected token '<'...` 오류
+**원인**: `API_URL = ''` — Vite 프록시가 프로덕션 환경에서 작동하지 않아 HTML 반환
+**수정 파일**: `frontend/src/App.jsx`
+
+```diff
+- const API_URL = '';
++ const API_URL = import.meta.env.VITE_API_URL || '';
+```
+
+---
+
 ## 알려진 이슈
 
 | 파일 | 위치 | 내용 |
 |------|------|------|
-| `backend/server.js` | line 257 | `model: 'gpt-5-mini'` → 존재하지 않는 모델명. `gpt-4o-mini`로 수정 필요 |
+| `frontend/src/App.jsx` | 결과 카드 | `safety_note` 필드 표시 UI 미구현 (암 배제 권고 경고 박스) |
+| `ai_server/inference_server.py` | step2 | Temperature Scaling 보정 테이블 미완성 (val set 측정 필요) |

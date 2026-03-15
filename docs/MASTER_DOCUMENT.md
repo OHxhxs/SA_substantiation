@@ -2,7 +2,7 @@
 
 **프로젝트**: 인도네시아어 위장내과 AI 문진 + 감별진단 시스템
 **운영사**: MENINBLOX
-**최종 업데이트**: 2026-03-15
+**최종 업데이트**: 2026-03-16
 
 ---
 
@@ -136,7 +136,7 @@
 }
 ```
 
-**대상 질환**: 53개 (GERD, 위암, 간암, 담낭염, 췌장염 등 위장내과 전 범위)
+**대상 질환**: 50개 (8개 장기계 그룹 — GERD, 위암, 간암, 담낭염, 췌장염 등 위장내과 전 범위)
 
 ---
 
@@ -218,7 +218,7 @@
 
 ## 5. 시스템 아키텍처
 
-### 현재 (OpenAI 사용 중)
+### 현재 아키텍처
 
 ```
 사용자 브라우저
@@ -226,25 +226,12 @@
 Firebase Hosting (프론트엔드 — React 정적 파일, 서울 CDN)
     ↓ /api/* 요청
 Cloud Run (백엔드 — Node.js Express, asia-northeast3 서울)
-    ↓
-OpenAI API (gpt-4o)
+    ├─ [rule survey]  → FastAPI 추론 서버 (GPU 서버, port 8755) → vLLM (Gemma)
+    └─ [chat survey]  → OpenAI API (gpt-4o)
 ```
 
-### 목표 (Gemma 전환 후)
-
-```
-사용자 브라우저
-    ↓
-Firebase Hosting (프론트엔드)
-    ↓ /api/* 요청
-Cloud Run (백엔드 — Node.js Express)
-    ↓
-FastAPI 추론 서버 (GPU 서버, port 8755)  ← inference_server.py
-    ↓
-vLLM × 2 인스턴스 (RTX 4090 각 1개, port 8754 / 8756)
-    ↓
-Gemma-SEA-LION-v3-9B-IT (bfloat16, LoRA adapter 로딩)
-```
+**rule 문진**: 선택형 → GPU 서버의 Gemma 모델 사용 (5단계 후처리 포함)
+**chat 문진**: 자유 대화 → OpenAI GPT-4o 사용
 
 ### 인프라 현황
 
@@ -323,13 +310,14 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 ### 7.2 /api/analyze 흐름
 
 ```
-요청 수신 (responses, language, redFlagTriggered 등)
+요청 수신 (responses, surveyType, language, redFlagTriggered 등)
     ↓
-prompts.yaml에서 언어별 질병 리스트 + 프롬프트 조립
-    ↓
-OpenAI gpt-4o 호출 (response_format: json_object)
-    ↓
-JSON 파싱 (code block 제거 후 재시도 포함)
+[surveyType === 'rule']
+    → fetch → AI_SERVER_URL/api/analyze (GPU 서버 Gemma)
+    → 5단계 후처리 포함 결과 반환
+[surveyType === 'chat']
+    → OpenAI gpt-4o 호출 (response_format: json_object)
+    → JSON 파싱
     ↓
 res.json() 반환
     ↓ (비동기)
@@ -349,45 +337,53 @@ Google Sheets 저장
 |------|------|
 | `OPENAI_API_KEY` | OpenAI API 키 |
 | `GOOGLE_SHEET_URL` | Google Apps Script 웹훅 URL |
+| `GPU_SERVER_URL` | GPU 추론 서버 URL (기본: `http://121.167.147.14:8755`) |
 | `NODE_ENV` | development / production |
 
 ---
 
 ## 8. 추론 서버 (GPU)
 
-**파일**: `scripts/inference_server.py`
+**파일**: `ai_server/inference_server.py`
 **역할**: vLLM 래퍼 + 5단계 후처리
 **스택**: FastAPI + httpx + vLLM
+**실행 스크립트**: `ai_server/start.sh`
 
 ### 8.1 구성
 
 ```
 FastAPI (port 8755)
-    ├── 라운드로빈 로드밸런서
-    ├── vLLM instance 0 (GPU 0, port 8754) — bfloat16, Gemma 9B
-    └── vLLM instance 1 (GPU 1, port 8756) — bfloat16, Gemma 9B
+    └── 라운드로빈 로드밸런서 (itertools.cycle)
+            └── vLLM (GPU 1+2 Tensor Parallel, port 8754)
+                    └── Gemma-SEA-LION-v3-9B-IT + LoRA (gastro)
 ```
 
-**왜 독립 인스턴스 2개인가?**
-- RTX 4090 24GB에 Gemma 9B bfloat16(~18GB) + KV cache(~6GB)가 딱 맞게 들어감
-- Tensor Parallel보다 처리량이 2배 높음 (100명 커버 목적)
-- 양자화 없이 bfloat16 원본 정확도 유지
+**GPU 설정**: RTX 4090 × 2를 Tensor Parallel(TP=2)로 묶어 단일 vLLM 인스턴스 운용
+- bfloat16 원본 정확도 유지 (양자화 미사용)
+- LoRA adapter: `MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172` (alias: `gastro`)
+- max-lora-rank 32, max-model-len 4096
 
 ### 8.2 실행
 
 ```bash
-# GPU 0
-CUDA_VISIBLE_DEVICES=0 vllm serve MENINBLOX/Idn_Gas_Gemma_v1 \
-  --dtype bfloat16 --port 8754
+# ai_server/start.sh
+CUDA_VISIBLE_DEVICES=1,2 python -m vllm.entrypoints.openai.api_server \
+  --model "aisingapore/Gemma-SEA-LION-v3-9B-IT" \
+  --enable-lora \
+  --lora-modules "gastro=MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172" \
+  --max-lora-rank 32 \
+  --dtype bfloat16 \
+  --tensor-parallel-size 2 \
+  --gpu-memory-utilization 0.8 \
+  --max-model-len 4096 \
+  --host 0.0.0.0 \
+  --port 8754 &
 
-# GPU 1
-CUDA_VISIBLE_DEVICES=1 vllm serve MENINBLOX/Idn_Gas_Gemma_v1 \
-  --dtype bfloat16 --port 8756
+sleep 120  # vLLM 준비 대기
 
-# FastAPI
-VLLM_URLS="http://localhost:8754,http://localhost:8756" \
-VLLM_MODEL="MENINBLOX/Idn_Gas_Gemma_v1" \
-uvicorn scripts.inference_server:app --host 0.0.0.0 --port 8755
+VLLM_URLS="http://localhost:8754" \
+VLLM_MODEL="gastro" \
+uvicorn inference_server:app --host 0.0.0.0 --port 8755
 ```
 
 ### 8.3 처리 용량 (RTX 4090 × 2 기준)
@@ -402,7 +398,7 @@ uvicorn scripts.inference_server:app --host 0.0.0.0 --port 8755
 
 ## 9. 안전성 설계 — 5단계 후처리
 
-**배경**: 학습 데이터가 53개 질환 균등 분포 → 경미한 증상에도 암이 Top-1으로 나올 위험.
+**배경**: 학습 데이터가 50개 질환 균등 분포 → 경미한 증상에도 암이 Top-1으로 나올 위험.
 모델 재학습 없이 추론 후처리로 해결. `inference_server.py`의 `apply_postprocessing()`에 구현.
 
 ### 단계별 요약
@@ -454,6 +450,7 @@ Red Flag 있음 + 암 Top-1 → 삭제 안 함 + "정밀검사 권장" 문구
 | `OPENAI_API_KEY` | OpenAI API 키 |
 | `GOOGLE_SHEET_URL` | Google Apps Script URL |
 | `FIREBASE_TOKEN` | Firebase CI 토큰 |
+| `GPU_SERVER_URL` | GPU 추론 서버 URL (rule survey용) |
 
 ### 10.3 주요 URL
 
@@ -486,9 +483,8 @@ gcloud run services update-traffic sa-backend \
 
 | 파일 | 위치 | 내용 | 우선순위 |
 |------|------|------|---------|
-| `backend/server.js` | line 257 | `model: 'gpt-5-mini'` → `gpt-4o-mini`로 수정 필요 | 낮음 (현재 `/api/analyze`는 gpt-4o 사용) |
-| `frontend/src/App.jsx` | 결과 카드 | `safety_note` 필드 표시 UI 미구현 | 중간 (후처리 전환 전 구현 필요) |
-| `scripts/inference_server.py` | step2 | Temperature Scaling 보정 테이블 미완성 (val set 측정 필요) | 중간 |
+| `frontend/src/App.jsx` | 결과 카드 | `safety_note` 필드 표시 UI 미구현 (암 배제 권고 경고 박스) | 중간 |
+| `ai_server/inference_server.py` | step2 | Temperature Scaling 보정 테이블 미완성 (val set 측정 필요) | 중간 |
 
 ---
 

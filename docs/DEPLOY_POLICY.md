@@ -32,8 +32,10 @@ feature/*   ← 기능 개발 브랜치
 Firebase Hosting (프론트 — HTML/CSS/JS 정적 파일)
   ↓ /api/* 호출
 Cloud Run (백엔드 — Node.js Express 컨테이너)
+  ├─ [rule survey]  → GPU 추론 서버 (inference_server.py:8755) → vLLM Gemma
+  └─ [chat survey]  → OpenAI API (gpt-4o)
   ↓
-OpenAI API + Google Sheets
+Google Sheets (결과 저장)
 ```
 
 ---
@@ -98,6 +100,7 @@ GitHub 레포 → Settings → Secrets and variables → Actions → New reposit
 | `OPENAI_API_KEY` | OpenAI API 키 | `sk-...` |
 | `GOOGLE_SHEET_URL` | Google Apps Script URL | `https://script.google.com/...` |
 | `FIREBASE_TOKEN` | Firebase CI 토큰 | `firebase login:ci` 결과값 |
+| `GPU_SERVER_URL` | GPU 추론 서버 URL | `http://[GPU서버IP]:8755` |
 
 ---
 
@@ -147,7 +150,7 @@ jobs:
             --platform managed \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
-            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GOOGLE_SHEET_URL=${{ secrets.GOOGLE_SHEET_URL }},NODE_ENV=production"
+            --set-env-vars "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},GOOGLE_SHEET_URL=${{ secrets.GOOGLE_SHEET_URL }},GPU_SERVER_URL=${{ secrets.GPU_SERVER_URL }},NODE_ENV=production"
 
   # ── 프론트엔드: Firebase Hosting 배포 ──────────────────
   deploy-frontend:
