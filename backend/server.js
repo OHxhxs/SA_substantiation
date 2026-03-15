@@ -23,9 +23,15 @@ try {
     process.exit(1);
 }
 
-// OpenAI 클라이언트 초기화
+// OpenAI 클라이언트 초기화 (채팅용)
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
+});
+
+// GPU 추론 서버 클라이언트 (룰베이스 문진 분석용)
+const gpuClient = new OpenAI({
+    baseURL: process.env.GPU_SERVER_URL || 'http://121.167.147.14:8754/v1',
+    apiKey: 'dummy',
 });
 
 // Google Sheets 저장 함수
@@ -305,18 +311,18 @@ app.post('/api/analyze', async (req, res) => {
             .replace('{questionnaire_data}', questionnaireText)
             .replace('{disease_list}', diseaseList);
 
-        console.log('🤖 Calling OpenAI for analysis...');
+        console.log('🤖 Calling GPU server for analysis...');
         console.log('📋 Disease List Count:', diseaseList.split('\n').length);
         console.log('📋 Disease List Sample (first 5):');
         console.log(diseaseList.split('\n').slice(0, 5).join('\n'));
 
-        const completion = await openai.chat.completions.create({
-            model: 'gpt-4o',
+        const completion = await gpuClient.chat.completions.create({
+            model: 'gastro',
             messages: [
                 { role: 'user', content: analysisPrompt }
             ],
-            response_format: { type: 'json_object' },
-            max_completion_tokens: 3000,
+            max_tokens: 1500,
+            temperature: 0.1,
         });
 
         const rawContent = completion.choices[0].message.content;

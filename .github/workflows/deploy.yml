@@ -42,6 +42,7 @@ jobs:
           env_vars: |
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             GOOGLE_SHEET_URL=${{ secrets.GOOGLE_SHEET_URL }}
+            GPU_SERVER_URL=${{ secrets.GPU_SERVER_URL }}
             NODE_ENV=production
 
   # ── 프론트엔드: Firebase Hosting ──────────────────────
