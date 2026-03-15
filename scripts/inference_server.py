@@ -6,11 +6,11 @@ inference_server.py — Gemma 추론 + 5단계 후처리 FastAPI 서버
 
 환경변수:
     VLLM_URLS  : 쉼표로 구분된 vLLM 서버 URL 목록 (기본: http://localhost:8754,http://localhost:8756)
-    VLLM_MODEL : 모델명 (기본: MENINBLOX/Idn_Gas_Gemma_v1)
+    VLLM_MODEL : 모델명 (기본: MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172)
 
 GPU 서버 실행 예시:
-    CUDA_VISIBLE_DEVICES=0 vllm serve MENINBLOX/Idn_Gas_Gemma_v1 --dtype bfloat16 --port 8754
-    CUDA_VISIBLE_DEVICES=1 vllm serve MENINBLOX/Idn_Gas_Gemma_v1 --dtype bfloat16 --port 8756
+    CUDA_VISIBLE_DEVICES=0 vllm serve MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172 --dtype bfloat16 --port 8754
+    CUDA_VISIBLE_DEVICES=1 vllm serve MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172 --dtype bfloat16 --port 8756
     uvicorn inference_server:app --host 0.0.0.0 --port 8755
 """
 
@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 # ── 설정 ──────────────────────────────────────────────────
 _raw_urls  = os.getenv("VLLM_URLS", "http://localhost:8754,http://localhost:8756")
 VLLM_URLS  = [u.strip() for u in _raw_urls.split(",") if u.strip()]
-VLLM_MODEL = os.getenv("VLLM_MODEL", "MENINBLOX/Idn_Gas_Gemma_v1")
+VLLM_MODEL = os.getenv("VLLM_MODEL", "MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172")
 
 # ── 라운드로빈 ─────────────────────────────────────────────
 _rr_cycle = itertools.cycle(VLLM_URLS)

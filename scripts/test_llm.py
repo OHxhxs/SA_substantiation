@@ -144,7 +144,7 @@ pasien : Sepertinya sudah lebih dari 10 tahun yang lalu. Setelah itu tidak ada m
 
 # Prepare payload in OpenAI format for vLLM
 payload = {
-    "model": "MENINBLOX/Idn_Gas_Cat_qwen3_4b_sft_v1-25000",  # vllm에 올려진 실제 model 이름/alias로 변경해야 함
+    "model": "MENINBLOX/sealion-v3-9b-gemma-checkpoint-2172",
     "messages": [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_input}
